@@ -55,7 +55,8 @@ class Logit:
             while(loss > tol and iters < max_iter):
                   loss = self.loss()
                   if not iters % 500:
-                        print(f'loss: {loss}')
+                        pass
+                        ##print(f'loss: {loss}')
                   p = self.forward().reshape(-1, 1)
                   self.theta -= -self.alpha*np.mean((self.y - p)*self.X, axis=0)
                   iters += 1

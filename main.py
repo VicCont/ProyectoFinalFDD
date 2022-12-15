@@ -10,7 +10,10 @@ import pickle
 import numpy as np
 import hashlib
 import multiprocessing
-
+import math
+import matplotlib.pyplot as plt
+import seaborn as sns
+from numpy.random import RandomState
 def save_model(dir_model,model):
     pickle.dump(model, open('model.pkl','wb'))
 
@@ -22,7 +25,7 @@ def load_model(dir_model):
 
 def get_training_data(dir_training_data,stop_words):
     if not (os.path.isfile(dir_training_data)):
-        f=open("dev-v2.0.json",encoding="utf-8")
+        f=open("train-v2.0.json",encoding="utf-8")
         data=json.load(f)
         f.close()
         json_data=[]
@@ -63,8 +66,8 @@ def append_results(result):
     result_list.append(result)
 
 if __name__=="__main__":
-    pool = multiprocessing.Pool(processes=10)
-
+    pool = multiprocessing.Pool(processes=8)
+    rs=RandomState(123454321)
     direccion_stopwords="stopword.pickle"
     dir_training_data="training_data.pickle"
     pattern=re.compile(r"\s{2.}")
@@ -93,7 +96,7 @@ if __name__=="__main__":
 
     ##modelo =load_model("model.pkl")
     ##if (not modelo):
-    training_data=training_data.sample(frac=0.05,random_state=123456,axis=0,ignore_index=True)
+    training_data=training_data.sample(frac=0.05,random_state=rs,axis=0,ignore_index=True)
     repeticiones=100
     modelo=Logit(training_data["jaccard"].to_numpy().reshape(-1, 1) ,training_data["responds_to_question"].to_numpy().reshape(-1, 1) )
     modelo.train()
@@ -102,11 +105,38 @@ if __name__=="__main__":
     bootstraping_thetas=np.array([])
     result_list=[]
     for _ in range(repeticiones):
-        aux_data=training_data.sample(frac=1,random_state=123456,axis=0,ignore_index=True)
+        aux_data=training_data.sample(frac=1,random_state=rs,axis=0,ignore_index=True,replace=True)
         pool.apply_async(bootstraping,[aux_data["jaccard"].to_numpy().reshape(-1, 1) ,aux_data["responds_to_question"].to_numpy().reshape(-1, 1)],callback=append_results)
     pool.close()
     pool.join()
     print(bootstraping_thetas)
     bootstraping_thetas=np.append(bootstraping_thetas,result_list)
     bootstraping_thetas=bootstraping_thetas.reshape(repeticiones,2)
-    print(bootstraping_thetas)
+    confidence_intervals={}
+
+    blue='#99ddee'
+    white='#ffffff'
+    fig, axs = plt.subplots(ncols=2, figsize=(20, 8), linewidth=5, 
+                            facecolor=blue)
+    fig.suptitle('Distribución de thetas')
+
+    for dim in range(2):
+        ax = axs[dim]
+        ax.set_xlabel(f'Distribucion de theta {dim}')
+        aux_data=np.sort(bootstraping_thetas[:,dim])
+        mean=aux_data.mean()
+        std=aux_data.std()
+        std_err=std/repeticiones
+        margin_err=std/2
+        aux=(.95)*std/math.sqrt(repeticiones)
+        confidence_intervals[dim]=(mean+aux+margin_err,mean-aux-margin_err)
+        df=pd.DataFrame({'0':aux_data})
+        df.plot.kde(ax=ax)
+        ax.axvline(x=mean-aux-margin_err, color='#395d90')
+        ax.axvline(x=mean+aux+margin_err, color='#395d90')
+    print(f"original thetas {original_theta}")
+    print("\n\nbootstraping thetas")
+    print (bootstraping_thetas)
+    print ("Confidence intervals")
+    print(confidence_intervals)
+    plt.show()
